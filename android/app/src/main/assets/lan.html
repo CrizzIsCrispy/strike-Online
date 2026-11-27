@@ -377,7 +377,9 @@ if(t-lastSend>=24){let a=lookDelta[0],b=lookDelta[1],seq=sent+1;let move=joy[2].
 const localHost=location.hostname==='127.0.0.1';
 document.querySelector('#lanHint').textContent=localHost?'Pilih map, tekan CREATE ROOM, kemudian kongsi kod.':'Masukkan kod daripada telefon hos.';
 document.querySelector(localHost?'#joinRoom':'#createRoom').hidden=true;
-$('#createRoom').onclick=()=>startOnline('host');$('#joinRoom').onclick=()=>startOnline('guest');$('#netLeave').onclick=()=>leave('Room closed.');let oldBack=$('#back').onclick;$('#back').onclick=()=>netRole?leave('Room closed.'):oldBack();let oldRestart=$('#restart').onclick;$('#restart').onclick=()=>{if(netRole==='guest')return;oldRestart();};
+$('#createRoom').onclick=()=>startOnline('host');$('#joinRoom').onclick=()=>startOnline('guest');
+const invite=/^#join=([0-9]{6})$/.exec(location.hash);
+if(!localHost&&invite){$('#roomCode').value=invite[1];window.addEventListener('load',()=>{if(!netRole)startOnline('guest');},{once:true});}$('#netLeave').onclick=()=>leave('Room closed.');let oldBack=$('#back').onclick;$('#back').onclick=()=>netRole?leave('Room closed.'):oldBack();let oldRestart=$('#restart').onclick;$('#restart').onclick=()=>{if(netRole==='guest')return;oldRestart();};
 const baseKeyDown=onkeydown,baseKeyUp=onkeyup;onkeydown=e=>{if(lobby.hidden&&netRole){let k=e.key.toLowerCase();if([' ','w','a','s','d','f','q','e','r','c','u'].includes(k))e.preventDefault();let i=netRole==='host'?0:1;if(!e.repeat){let a={' ':'jump',c:'crouch',u:'unstuck',r:'reload',g:'grenade',v:'swap',shift:'sprint'}[k];if(a)action(i,a);}if(netRole==='guest'&&(k==='q'||k==='e'))look(1,k==='q'?-.08:.08,0);if(!['arrowup','arrowdown','arrowleft','arrowright','enter','j','l','k','m','o','p','n'].includes(k))keys[k]=true;return}if(lobby.hidden)baseKeyDown(e)};onkeyup=e=>baseKeyUp(e);window.addEventListener('blur',()=>{clearInput();});document.addEventListener('visibilitychange',()=>{if(document.hidden)clearInput()});
 
 
