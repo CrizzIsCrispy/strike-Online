@@ -6,8 +6,8 @@ android {
         applicationId 'com.strikeelite.game'
         minSdk 26
         targetSdk 35
-        versionCode 2
-        versionName '1.1'
+        versionCode 3
+        versionName '1.2'
     }
 }
 
@@ -24,3 +24,5 @@ tasks.register('generateStrikeLauncher') {
 }
 android.sourceSets.main.res.srcDir(launcherResources)
 tasks.named('preBuild').configure { dependsOn('generateStrikeLauncher') }
+
+dependencies { implementation 'org.nanohttpd:nanohttpd-websocket:2.3.1' }
