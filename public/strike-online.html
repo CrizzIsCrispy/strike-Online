@@ -99,6 +99,21 @@ const scale=1.16;
 shadow(x,z,6.5*scale,8.4*scale);
 const houseBox=(bx,by,bz,w,h,d,...args)=>B(x+(bx-x)*scale,by,z+(bz-z)*scale,w*scale,h,d*scale,...args);
 makeHouse(houseBox,x,z,{...m,style:(m.style+index)%4},scale);
+// Front yard with a path, flower pots and rounded hedges.
+const soil=[.27,.34,.21],terracotta=[.56,.29,.19];
+houseBox(x,.003,z+5.85,5.95,.014,3.30,soil);
+for(let tile=0;tile<4;tile++)houseBox(x-.8,.027,z+4.47+tile*.58,1.21,.045,.51,concrete);
+for(const side of [-1,1]){
+ const px=x+side*2.38*scale,pz=z+4.78*scale;
+ B(px,.18,pz,.40,.36,.40,terracotta,0,0,0,2);
+ B(px,.35,pz,.46,.09,.46,[.65,.37,.23],0,0,0,2);
+ E(px,.52,pz,.22,.17,.22,[.25,.47,.22],4,7);
+ for(let flower=0;flower<3;flower++){
+  const angle=flower*2.1;
+  E(px+Math.sin(angle)*.11,.67,pz+Math.cos(angle)*.11,.068,.061,.068,side<0?[.94,.66,.25]:[.74,.32,.43],4,6);
+ }
+ for(let clump=0;clump<3;clump++)E(px+(clump-1)*.46,.44,z+6.22*scale,.41,.43,.45,[.20+clump*.028,.34,.20],5,8);
+}
 // Porches, pitched roof, chimney, awning, drainage and garden furniture.
 for(let side of [-1,1]){houseBox(x,5.99,z+side*2.0,6.1,.16,4.25,[.34+index%3*.03,.24,.20],1,0,side*.24);}
 houseBox(x,6.50,z,6.2,.16,.22,metal);houseBox(x+1.7,6.0,z+2,.65,1.5,.65,[.42,.36,.30],1);
@@ -187,6 +202,7 @@ function watchTower(x,z){
  for(const dx of [-1.64,1.64])for(const dz of [-1.58,1.58])
   put(dx,dz,.16,.16,0,6.05);
  put(0,0,3.93,3.85,6.02,6.19);
+ B(x,.043,z+8.20,1.6,.06,.58,deck);
  for(const dx of [-1.7,1.7])put(dx,0,.13,3.44,landing,landing+.75);
  put(0,-1.68,width,.13,landing,landing+.75);
  for(const dx of [-1.30,1.30])put(dx,1.68,1.01,.13,landing,landing+.75);
@@ -233,7 +249,27 @@ function makeHouse(B,x,z,m,scale=1){
  table(-1.58,.62,0);
  table(-1.58,-1.18,H);
  // Low furniture and doorway details; open windows remain unblocked.
- add(-1.75,-1.8,1.1,.65,0,.65,trim);add(-1.65,1.85,1.05,.7,H,H+.72,trim);
+  // Divider with a walk-through doorway beside the stairwell.
+ const partition=[.54,.50,.43],fabric=[.28,.39,.40],wood=[.40,.30,.22];
+ add(-2.11,-1.21,1.12,.12,0,2.44,partition);
+ add(-.15,-1.21,.64,.12,0,2.44,partition);
+ add(-1.06,-1.21,1.20,.12,2.08,2.44,partition);
+ // Lounge faces its wall-mounted TV and keeps the rear entrance clear.
+ deco(-1.66,.028,2.02,1.38,.018,1.6,[.48,.33,.27]);
+ add(-2.13,1.95,.82,1.46,0,.42,fabric);
+ add(-2.47,1.95,.16,1.50,.42,.97,fabric);
+ for(const edge of [-1,1])add(-2.14,1.95+edge*.66,.68,.16,.42,.67,fabric);
+ deco(-2.11,.47,1.63,.62,.10,.55,[.37,.47,.46]);
+ deco(-2.11,.47,2.26,.62,.10,.55,[.37,.47,.46]);
+ add(-.08,1.85,.39,.98,0,.43,wood);
+ deco(-.08,1.30,1.85,.09,.57,1.01,[.08,.09,.10]);
+ deco(-.137,1.31,1.85,.024,.46,.90,[.16,.25,.28]);
+ // Bedroom uses the rear-left corner, beyond the divider.
+ add(-2.04,-2.51,.89,1.39,0,.37,wood);
+ deco(-2.04,.43,-2.51,.86,.13,1.33,[.76,.75,.66]);
+ deco(-2.04,.53,-2.98,.66,.09,.32,[.91,.87,.76]);
+ deco(-2.04,.51,-2.31,.86,.055,.91,[.32,.43,.47]);
+add(-1.65,1.85,1.05,.7,H,H+.72,trim);
  for(let b of [-3.65,3.65])deco(0,2.62,b,5.7,.12,.36,trim);
  for(let b of [-1.6,-.5,.6,1.7]){deco(.61,3.05,b,.07,.9,.07,trim)}deco(.61,3.5,0,.07,.07,4.7,trim);
  deco(-.8,.04,4.0,1.7,.08,.6,floor);deco(-.8,.04,-4.0,1.7,.08,.6,floor);
