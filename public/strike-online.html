@@ -321,7 +321,7 @@ function perform(i,a){let v=p[i];if(!v||!playing||delay||matchOver||!v.hp)return
 function action(i,a){if(netRole==='guest'){if(i===1&&netReady&&netActions.length<20)netActions.push(a);return}if(!netRole||i===0)perform(i,a)}
 function setFire(i,f){if(netRole==='guest'){if(i===1)netFire=f}else if(!netRole||i===0)p[i].fire=f;}
 function look(i,a,b){if(netRole&&i!==(netRole==='host'?0:1))return;let v=p[i];v.a+=a;v.pitch=Math.max(-.85,Math.min(.85,v.pitch+b));if(netRole==='guest'){lookDelta[0]+=a;lookDelta[1]+=b;}}
-function send(m){if(socket&&socket.readyState===1&&socket.bufferedAmount<500000){socket.send(JSON.stringify(m));return true}return false}
+function send(m){if(socket&&socket.readyState===1&&socket.bufferedAmount<(m.type==='state'?48000:12000)){socket.send(JSON.stringify(m));return true}return false}
 function netUI(active){hud.classList.toggle('online',active);[...hud.children].forEach((el,i)=>el.hidden=active&&i!==(netRole==='host'?0:1));applyControlLayouts();$('#roomTag').hidden=!active;$('#restart').hidden=active&&netRole==='guest';$('#netLeave').hidden=!active;$('#createRoom').disabled=active;$('#joinRoom').disabled=active;$('#play').disabled=active;for(let el of document.querySelectorAll('.mapcard,#w0,#w1'))el.disabled=active;}
 function clearInput(){joy.forEach((_,i)=>joy[i]=[0,0]);keys={};netFire=false;netActions=[];lookDelta=[0,0];pendingLook=[];if(p)p.forEach(v=>v.fire=false);}
 function leave(message='Disconnected. Create or join another room.'){let old=socket;socket=null;if(old)old.close();netRole=null;room='';netReady=false;playing=false;lobby.hidden=false;clearInput();netUI(false);status(message);}
@@ -343,8 +343,26 @@ function reconcile(v,n){
 }
 function guestTick(dt,t){if(!netReady)return;netPing(t);let v=p[1],m=joy[2],x=m[0]+(+!!keys.d)-(+!!keys.a),z=m[1]+(+!!keys.s)-(+!!keys.w);
 if(!guestView||delay||matchOver||!v.hp){guestView={...v};history=[];correction=null;}
-else{predict(guestView,v,x,z,dt);history.push({seq:sent+1,x,z,dt,yaw:v.a});if(history.length>90)history.shift();
- if(correction){let k=1-Math.exp(-dt*8),dx=correction.x*k,dz=correction.z*k;if(moveClear(guestView.x+dx,guestView.z,v))guestView.x+=dx;if(moveClear(guestView.x,guestView.z+dz,v))guestView.z+=dz;correction.x-=dx;correction.z-=dz;}
+else{
+ const beforeX=guestView.x,beforeZ=guestView.z;
+ predict(guestView,v,x,z,dt);
+ history.push({seq:sent+1,x,z,dt,yaw:v.a});
+ if(history.length>90)history.shift();
+ if(correction){
+  const stepX=guestView.x-beforeX,stepZ=guestView.z-beforeZ,step=Math.hypot(stepX,stepZ);
+  const k=1-Math.exp(-dt*8);
+  let dx=correction.x*k,dz=correction.z*k;
+  // Limit opposing correction so a slightly delayed snapshot cannot reverse a walking frame.
+  if(step>1e-5){
+   const ux=stepX/step,uz=stepZ/step,back=dx*ux+dz*uz;
+   if(back<-.30*step){const excess=-.30*step-back;dx+=ux*excess;dz+=uz*excess;}
+  }
+  const sim={...v,x:guestView.x,z:guestView.z};
+  walkStep(sim,p[0],dx,dz);
+  const movedX=sim.x-guestView.x,movedZ=sim.z-guestView.z;
+  guestView.x=sim.x;guestView.z=sim.z;
+  correction.x-=movedX;correction.z-=movedZ;
+ }
  guestView.visualY+=(v.visualY-guestView.visualY)*(1-Math.exp(-dt*22));}
 if(t-lastSend>=24){let a=lookDelta[0],b=lookDelta[1],seq=sent+1;let move=joy[2].slice();move[0]+=(keys.d?1:0)-(keys.a?1:0);move[1]+=(keys.s?1:0)-(keys.w?1:0);let n=Math.max(1,Math.hypot(...move));move=move.map(x=>x/n);if(send({type:'input',seq,move,look:[a,b],fire:netFire||!!keys.f,actions:netActions})){sent=seq;lastSend=t;pendingLook.push({seq,a,b});if(pendingLook.length>120)pendingLook.shift();lookDelta=[0,0];netActions=[]}}}
 $('#createRoom').onclick=()=>startOnline('host');$('#joinRoom').onclick=()=>startOnline('guest');$('#netLeave').onclick=()=>leave('Room closed.');let oldBack=$('#back').onclick;$('#back').onclick=()=>netRole?leave('Room closed.'):oldBack();let oldRestart=$('#restart').onclick;$('#restart').onclick=()=>{if(netRole==='guest')return;oldRestart();};
