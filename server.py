@@ -13,9 +13,14 @@ for _old, _new in _stair_replacements:
     GAME_HTML = GAME_HTML.replace(_old.encode(), _new.encode(), 1)
 
 GAME_HTML = GAME_HTML.replace(b'</head>', "<style>button,[role=\"button\"]{transition:transform 140ms cubic-bezier(.2,.8,.2,1),filter 140ms,box-shadow 180ms;-webkit-tap-highlight-color:transparent}button:active,[role=\"button\"]:active,.strike-pressed{transform:scale(.95);filter:brightness(1.25);box-shadow:0 0 18px #70caff66} @media(prefers-reduced-motion:reduce){button,[role=\"button\"]{transition:none}}</style><script>document.addEventListener('pointerdown',e=>{const b=e.target.closest('button,[role=\"button\"]');if(b){b.classList.add('strike-pressed');setTimeout(()=>b.classList.remove('strike-pressed'),180)}},true);</script>".encode() + b'</head>', 1)
-GAME_HTML = GAME_HTML.replace(b'</head>', "<script>(()=>{const original=HTMLCanvasElement.prototype.getContext;HTMLCanvasElement.prototype.getContext=function(type,opts){if(/^webgl|^experimental-webgl/.test(type)){const ctx=original.call(this,type,{...opts,antialias:true});if(ctx){const canvas=this;const resize=()=>{const w=canvas.clientWidth,h=canvas.clientHeight;if(!w||!h)return;const scale=Math.min(1920/w,1080/h);const x=Math.round(w*scale),y=Math.round(h*scale);if(canvas.width!==x||canvas.height!==y){canvas.width=x;canvas.height=y;}};const observer=new ResizeObserver(resize);observer.observe(canvas);const viewport=ctx.viewport.bind(ctx);ctx.viewport=function(x,y,w,h){if(x===0&&y===0&&w===canvas.width&&h===canvas.height){resize();return viewport(0,0,canvas.width,canvas.height)}return viewport(x,y,w,h)};return ctx;}return ctx;}return original.call(this,type,opts);};})();</script>".encode() + b'</head>', 1)
 # Three grenades per player at round reset.
 GAME_HTML = GAME_HTML.replace(b'v.grenades=2;', b'v.grenades=3;')
+
+# Keep canvas resizing in the render loop, before viewport and scissor are set.
+for _old, _new in [["if(netRole)render(netRole==='host'?0:1);else{render(0);render(1);}","if(playing){if(netRole)render(netRole==='host'?0:1);else{render(0);render(1);}}"],["innerWidth*devicePixelRatio","innerWidth*Math.min(devicePixelRatio,1.5)"],["function render(i){let v=p[i],q=p[1-i],","let guestView=null;function render(i){let v=p[i],q=p[1-i];if(netRole==='guest'&&guestView){v={...v,x:guestView.x,z:guestView.z,visualY:guestView.y};}let "],["function guestTick(dt,t){if(!netReady)return;","function guestTick(dt,t){if(!netReady)return;const v=p[1];if(!guestView||Math.hypot(v.x-guestView.x,v.z-guestView.z)>1.4||delay||v.hp<=0)guestView={x:v.x,z:v.z,y:v.visualY};else{const k=1-Math.exp(-dt*28);guestView.x+=(v.x-guestView.x)*k;guestView.z+=(v.z-guestView.z)*k;guestView.y+=(v.visualY-guestView.y)*k;}"],["netRole=mode;netReady=false;","guestView=null;netRole=mode;netReady=false;"]]:
+    if GAME_HTML.count(_old.encode()) != 1:
+        raise RuntimeError('Online render patch source changed: ' + _old)
+    GAME_HTML = GAME_HTML.replace(_old.encode(), _new.encode(), 1)
 
 rooms = {}
 ACTIONS = {'scope', 'crouch', 'jump', 'unstuck', 'swap', 'grenade', 'reload', 'sprint'}
