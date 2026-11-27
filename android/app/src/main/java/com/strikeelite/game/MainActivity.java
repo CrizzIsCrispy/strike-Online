@@ -136,12 +136,12 @@ public final class MainActivity extends Activity {
                 boolean local = "http".equals(r.getUrl().getScheme())
                         && r.getUrl().getPort() == LanServer.PORT
                         && lanAddress != null && lanAddress.equals(r.getUrl().getHost());
-                return !(local || "file:///android_asset/index.html".equals(r.getUrl().toString()) || ("https".equals(r.getUrl().getScheme()) && "strike-elite-v12-online.onrender.com".equals(r.getUrl().getHost()) && r.getUrl().getPort() == -1));
+                return !(local || "file:///android_asset/games.html".equals(r.getUrl().toString()) || "file:///android_asset/apex.html".equals(r.getUrl().toString()) || "file:///android_asset/index.html".equals(r.getUrl().toString()) || ("https".equals(r.getUrl().getScheme()) && "strike-elite-v12-online.onrender.com".equals(r.getUrl().getHost()) && r.getUrl().getPort() == -1));
             }
         });
         game.setWebChromeClient(new WebChromeClient());
         setContentView(game);
-        game.loadUrl("file:///android_asset/index.html");
+        game.loadUrl("file:///android_asset/games.html");
         immersive();
     }
     @SuppressWarnings("deprecation")
@@ -244,12 +244,13 @@ public final class MainActivity extends Activity {
     }
     @SuppressWarnings("deprecation")
     @Override public void onBackPressed() {
-        if (game.getUrl() != null && (game.getUrl().startsWith("https://") || lanAddress != null)) {
+        if (game.getUrl() != null && !"file:///android_asset/games.html".equals(game.getUrl())) {
             stopLan();
-            game.loadUrl("file:///android_asset/index.html");
+            game.loadUrl("file:///android_asset/games.html");
         } else super.onBackPressed();
     }
     @Override protected void onPause() { game.onPause(); super.onPause(); }
     @Override protected void onResume() { super.onResume(); game.onResume(); }
     @Override protected void onDestroy() { stopLan(); game.destroy(); super.onDestroy(); }
 }
+
