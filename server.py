@@ -3,7 +3,7 @@ from pathlib import Path
 from aiohttp import web, WSMsgType
 
 ROOT = Path(__file__).resolve().parent
-GAME_HTML = lzma.decompress(base64.b64decode((ROOT / 'public' / 'game.xz.b64').read_text()))
+GAME_HTML = lzma.decompress(base64.b64decode(''.join((ROOT / 'public' / ('game_%02d.txt' % i)).read_text() for i in range(1, 8))))
 rooms = {}
 ACTIONS = {'scope', 'crouch', 'jump', 'unstuck', 'swap', 'grenade', 'reload', 'sprint'}
 
