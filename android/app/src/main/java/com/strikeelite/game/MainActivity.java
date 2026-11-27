@@ -32,6 +32,7 @@ public final class MainActivity extends Activity {
     private static final String LAN_TYPE="_strikeelite._tcp.";
     private NsdManager.RegistrationListener announcement;
     private NsdManager.DiscoveryListener scan;
+    private android.net.wifi.WifiManager.MulticastLock discoveryLock;
 
     private NsdManager nsd() { return getSystemService(NsdManager.class); }
 
@@ -67,6 +68,7 @@ public final class MainActivity extends Activity {
     }
 
     private void stopScan() {
+        if(discoveryLock!=null){if(discoveryLock.isHeld())discoveryLock.release();discoveryLock=null;}
         if(scan==null)return;
         NsdManager.DiscoveryListener previous=scan;
         scan=null;
@@ -79,24 +81,19 @@ public final class MainActivity extends Activity {
         ArrayList<String> names=new ArrayList<>();
         ArrayAdapter<String> adapter=new ArrayAdapter<>(this,android.R.layout.simple_list_item_1,names);
         AlertDialog dialog=new AlertDialog.Builder(this).setTitle("Cari bilik LAN")
-            .setAdapter(adapter,null)
+            .setAdapter(adapter,(d,position)->{
+                NsdServiceInfo selected=rooms.get(adapter.getItem(position));
+                if(selected!=null){stopScan();connectRoom(selected);}
+            })
             .setNegativeButton("Batal",null).setNeutralButton("Masukkan IP",(d,w)->joinLanManual())
             .create();
-        android.widget.TextView empty=new android.widget.TextView(this);
-        empty.setText("Mencari bilik pada Wi-Fi atau hotspot yang sama…");
-        empty.setPadding(24,20,24,20);
+        dialog.setTitle("Mencari bilik LAN…");
         dialog.setOnDismissListener(d->stopScan());
         dialog.show();
-        android.widget.ListView list=dialog.getListView();
-        list.addHeaderView(empty,null,false);
-        // The header changes list positions, so handle entries by item rather than index.
-        list.setOnItemClickListener((parent,view,position,id)->{
-            Object item=parent.getItemAtPosition(position);
-            if(!(item instanceof String))return;
-            dialog.getListView().setItemChecked(position,true);
-            NsdServiceInfo selected=rooms.get((String)item);
-            if(selected!=null){dialog.dismiss();connectRoom(selected);}
-        });
+        try {
+            android.net.wifi.WifiManager wifi=getApplicationContext().getSystemService(android.net.wifi.WifiManager.class);
+            if(wifi!=null){discoveryLock=wifi.createMulticastLock("StrikeEliteLAN");discoveryLock.setReferenceCounted(false);discoveryLock.acquire();}
+        } catch(SecurityException ignored){}
         scan=new NsdManager.DiscoveryListener(){
             private void change(NsdServiceInfo info,boolean add){
                 runOnUiThread(()->{
@@ -104,7 +101,7 @@ public final class MainActivity extends Activity {
                     String name=info.getServiceName();
                     if(add)rooms.put(name,info);else rooms.remove(name);
                     names.clear();names.addAll(rooms.keySet());adapter.notifyDataSetChanged();
-                    empty.setText(names.isEmpty()?"Mencari bilik LAN…":"Pilih bilik untuk masuk");
+                    dialog.setTitle(names.isEmpty()?"Mencari bilik LAN…":"Pilih bilik untuk masuk");
                 });
             }
             @Override public void onDiscoveryStarted(String type){}
@@ -112,12 +109,12 @@ public final class MainActivity extends Activity {
             @Override public void onServiceFound(NsdServiceInfo info){change(info,true);}
             @Override public void onServiceLost(NsdServiceInfo info){change(info,false);}
             @Override public void onStartDiscoveryFailed(String type,int error){
-                runOnUiThread(()->{if(scan==this){scan=null;empty.setText("Carian gagal. Cuba guna alamat IP.");}});
+                runOnUiThread(()->{if(scan==this){stopScan();dialog.setTitle("Carian gagal. Cuba guna alamat IP.");}});
             }
             @Override public void onStopDiscoveryFailed(String type,int error){}
         };
         try { nsd().discoverServices(LAN_TYPE,NsdManager.PROTOCOL_DNS_SD,scan); }
-        catch(IllegalArgumentException error){scan=null;empty.setText("Carian gagal. Cuba guna alamat IP.");}
+        catch(IllegalArgumentException error){scan=null;dialog.setTitle("Carian gagal. Cuba guna alamat IP.");}
     }
 
     @Override public void onCreate(Bundle state) {
