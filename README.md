@@ -13,12 +13,12 @@ Render Web Service:
 
 The relay handles WebSockets at `/ws`. The host browser simulates both players and the guest receives snapshots. Keep both browsers open during the match.
 
-The original game HTML is losslessly archived in `public/game.xz.b64` to fit the publishing workflow. The Python server decompresses it at startup and serves it on `/`. To extract an editable copy:
+The original game HTML is losslessly archived in `public/game_01.txt` … `public/game_07.txt` to fit the publishing workflow. The Python server decompresses it at startup and serves it on `/`. To extract an editable copy:
 
 ```python
 import lzma, base64
 from pathlib import Path
-Path("index.html").write_bytes(lzma.decompress(base64.b64decode(Path("public/game.xz.b64").read_text())))
+Path("index.html").write_bytes(lzma.decompress(base64.b64decode("".join(Path(f"public/game_{i:02}.txt").read_text() for i in range(1,8)))))
 ```
 
 ## Current limitations
