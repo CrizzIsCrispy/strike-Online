@@ -7,10 +7,15 @@ import org.json.JSONObject;
 final class LanServer extends NanoWSD {
     static final int PORT = 8765;
     private final String page;
+    private final java.util.function.Consumer<String> roomChanged;
     private Peer host, guest;
     private JSONObject start;
     private String code;
-    LanServer(String page) { super(PORT); this.page=page; }
+    LanServer(String page, java.util.function.Consumer<String> roomChanged) {
+        super(PORT);
+        this.page=page;
+        this.roomChanged=roomChanged;
+    }
 
     @Override public Response serveHttp(IHTTPSession request) {
         if (request.getMethod()!=Method.GET || !"/".equals(request.getUri()))
@@ -46,6 +51,7 @@ final class LanServer extends NanoWSD {
                 code=String.format(java.util.Locale.ROOT,"%06d",new SecureRandom().nextInt(1000000));
                 start=new JSONObject().put("type","start").put("room",code).put("map",map).put("hostGun",gun);
                 host=peer;
+                roomChanged.accept(code);
                 deliver(host,new JSONObject().put("type","room").put("room",code));
                 break;
             case "join":
@@ -56,6 +62,7 @@ final class LanServer extends NanoWSD {
                 int guestGun=message.optInt("gun",-1);
                 if(guestGun<0 || guestGun>5) return;
                 guest=peer;
+                roomChanged.accept(null);
                 start.put("guestGun",guestGun);
                 deliver(host,start);
                 deliver(guest,start);
@@ -72,6 +79,7 @@ final class LanServer extends NanoWSD {
         if(peer!=host && peer!=guest) return;
         Peer other=peer==host?guest:host;
         host=guest=null; start=null; code=null;
+        roomChanged.accept(null);
         try { deliver(other,new JSONObject().put("type","left")); } catch(Exception ignored) {}
     }
     private final class Peer extends WebSocket {
