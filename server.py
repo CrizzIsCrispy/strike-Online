@@ -6,6 +6,7 @@ ROOT = Path(__file__).resolve().parent
 GAME_HTML = (ROOT / 'public' / 'strike-online.html').read_bytes()
 
 rooms = {}
+race_rooms = {}
 ACTIONS = {'scope', 'crouch', 'jump', 'unstuck', 'swap', 'grenade', 'reload', 'sprint'}
 
 def integer(v, lo, hi):
@@ -35,6 +36,8 @@ async def websocket(request):
 
     ws = web.WebSocketResponse(heartbeat=20, max_msg_size=256*1024, compress=False)
     await ws.prepare(request)
+    race = request.path == '/apex/ws'
+    pool = race_rooms if race else rooms
     code = None
     role = None
     seq = -1
@@ -68,22 +71,22 @@ async def websocket(request):
                     await send(ws, {'type': 'error', 'message': 'Invalid weapon.'})
                     continue
                 if t == 'create':
-                    if len(rooms) >= 100:
+                    if len(pool) >= 100:
                         await send(ws, {'type': 'error', 'message': 'Server full.'})
                         continue
                     if not integer(m.get('map'), 0, 3):
                         continue
                     code = ''.join(secrets.choice('ABCDEFGHJKLMNPQRSTUVWXYZ23456789') for _ in range(6))
-                    while code in rooms:
+                    while code in pool:
                         code = ''.join(secrets.choice('ABCDEFGHJKLMNPQRSTUVWXYZ23456789') for _ in range(6))
                     role = 'host'
-                    rooms[code] = {'host': ws, 'guest': None, 'map': m['map'], 'hostGun': gun}
+                    pool[code] = {'host': ws, 'guest': None, 'map': m['map'], 'hostGun': gun}
                     await send(ws, {'type': 'room', 'room': code})
                 elif t == 'join':
                     candidate = m.get('room')
                     if not isinstance(candidate, str):
                         continue
-                    r = rooms.get(candidate)
+                    r = pool.get(candidate)
                     if not r or r['host'].closed or r['guest'] is not None:
                         await send(ws, {'type': 'error', 'message': 'Room not found or already full.'})
                         continue
@@ -92,8 +95,14 @@ async def websocket(request):
                     start = {'type': 'start', 'room': code, 'map': r['map'], 'hostGun': r['hostGun'], 'guestGun': gun}
                     await asyncio.gather(send(r['host'], start), send(ws, start))
                 continue
-            r = rooms.get(code)
+            r = pool.get(code)
             if not r or r['guest'] is None:
+                continue
+            if race:
+                if role == 'guest' and t == 'drive' and integer(m.get('keys'), 0, 63):
+                    await send(r['host'], {'type': 'drive', 'keys': m['keys']})
+                elif role == 'host' and t == 'race' and isinstance(m.get('cars'), list) and len(m['cars']) == 2 and isinstance(m.get('traffic'), list) and len(m['traffic']) <= 100:
+                    await send(r['guest'], m)
                 continue
             if role == 'guest' and t == 'input':
                 n, a = m.get('seq'), m.get('actions')
@@ -107,9 +116,9 @@ async def websocket(request):
                     continue
                 await send(r['guest'], {'type': 'state', 'ack': m['ack'], 'state': s})
     finally:
-        r = rooms.get(code)
+        r = pool.get(code)
         if r and r.get(role) is ws:
-            rooms.pop(code, None)
+            pool.pop(code, None)
             other = r['guest' if role == 'host' else 'host']
             await send(other, {'type': 'left'})
             if other is not None and not other.closed:
@@ -117,9 +126,17 @@ async def websocket(request):
     return ws
 
 app = web.Application()
+async def arcade_page(request):
+    filename = 'apex.html' if request.path == '/apex' else 'games.html'
+    return web.FileResponse(ROOT / 'public' / filename)
+
+app.router.add_get('/games', arcade_page)
+app.router.add_get('/apex', arcade_page)
+app.router.add_get('/apex/ws', websocket)
 app.router.add_get('/', index)
 app.router.add_get('/health', health)
 app.router.add_get('/ws', websocket)
 
 if __name__ == '__main__':
     web.run_app(app, host='0.0.0.0', port=int(os.environ.get('PORT', '8080')))
+
