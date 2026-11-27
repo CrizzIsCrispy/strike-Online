@@ -2,6 +2,13 @@ package com.strikeelite.game;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.net.nsd.NsdManager;
+import android.net.nsd.NsdServiceInfo;
+import android.widget.ArrayAdapter;
+import android.widget.Toast;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.nio.charset.StandardCharsets;
 import android.widget.EditText;
 import android.text.InputType;
 import java.io.ByteArrayOutputStream;
@@ -22,6 +29,97 @@ public final class MainActivity extends Activity {
     private WebView game;
     private LanServer lan;
     private String lanAddress;
+    private static final String LAN_TYPE="_strikeelite._tcp.";
+    private NsdManager.RegistrationListener announcement;
+    private NsdManager.DiscoveryListener scan;
+
+    private NsdManager nsd() { return getSystemService(NsdManager.class); }
+
+    private void hideRoom() {
+        if(announcement==null)return;
+        NsdManager.RegistrationListener previous=announcement;
+        announcement=null;
+        try { nsd().unregisterService(previous); } catch(IllegalArgumentException ignored) {}
+    }
+
+    private void advertiseRoom(String code) {
+        hideRoom();
+        if(code==null || lan==null || isFinishing())return;
+        NsdServiceInfo service=new NsdServiceInfo();
+        service.setServiceName("Strike Elite "+code);
+        service.setServiceType(LAN_TYPE);
+        service.setPort(LanServer.PORT);
+        service.setAttribute("room",code);
+        announcement=new NsdManager.RegistrationListener(){
+            @Override public void onServiceRegistered(NsdServiceInfo info){}
+            @Override public void onRegistrationFailed(NsdServiceInfo info,int error){
+                runOnUiThread(()->{
+                    if(announcement!=this)return;
+                    announcement=null;
+                    Toast.makeText(MainActivity.this,"Senarai LAN tak tersedia. Guna IP dan kod bilik.",Toast.LENGTH_LONG).show();
+                });
+            }
+            @Override public void onServiceUnregistered(NsdServiceInfo info){}
+            @Override public void onUnregistrationFailed(NsdServiceInfo info,int error){}
+        };
+        try { nsd().registerService(service,NsdManager.PROTOCOL_DNS_SD,announcement); }
+        catch(IllegalArgumentException error){ announcement=null; }
+    }
+
+    private void stopScan() {
+        if(scan==null)return;
+        NsdManager.DiscoveryListener previous=scan;
+        scan=null;
+        try { nsd().stopServiceDiscovery(previous); } catch(IllegalArgumentException ignored) {}
+    }
+
+    @SuppressWarnings("deprecation")
+    private void joinLan() {
+        LinkedHashMap<String,NsdServiceInfo> rooms=new LinkedHashMap<>();
+        ArrayList<String> names=new ArrayList<>();
+        ArrayAdapter<String> adapter=new ArrayAdapter<>(this,android.R.layout.simple_list_item_1,names);
+        AlertDialog dialog=new AlertDialog.Builder(this).setTitle("Cari bilik LAN")
+            .setAdapter(adapter,null)
+            .setNegativeButton("Batal",null).setNeutralButton("Masukkan IP",(d,w)->joinLanManual())
+            .create();
+        android.widget.TextView empty=new android.widget.TextView(this);
+        empty.setText("Mencari bilik pada Wi-Fi atau hotspot yang sama…");
+        empty.setPadding(24,20,24,20);
+        dialog.setOnDismissListener(d->stopScan());
+        dialog.show();
+        android.widget.ListView list=dialog.getListView();
+        list.addHeaderView(empty,null,false);
+        // The header changes list positions, so handle entries by item rather than index.
+        list.setOnItemClickListener((parent,view,position,id)->{
+            Object item=parent.getItemAtPosition(position);
+            if(!(item instanceof String))return;
+            dialog.getListView().setItemChecked(position,true);
+            NsdServiceInfo selected=rooms.get((String)item);
+            if(selected!=null){dialog.dismiss();connectRoom(selected);}
+        });
+        scan=new NsdManager.DiscoveryListener(){
+            private void change(NsdServiceInfo info,boolean add){
+                runOnUiThread(()->{
+                    if(scan!=this || !dialog.isShowing())return;
+                    String name=info.getServiceName();
+                    if(add)rooms.put(name,info);else rooms.remove(name);
+                    names.clear();names.addAll(rooms.keySet());adapter.notifyDataSetChanged();
+                    empty.setText(names.isEmpty()?"Mencari bilik LAN…":"Pilih bilik untuk masuk");
+                });
+            }
+            @Override public void onDiscoveryStarted(String type){}
+            @Override public void onDiscoveryStopped(String type){}
+            @Override public void onServiceFound(NsdServiceInfo info){change(info,true);}
+            @Override public void onServiceLost(NsdServiceInfo info){change(info,false);}
+            @Override public void onStartDiscoveryFailed(String type,int error){
+                runOnUiThread(()->{if(scan==this){scan=null;empty.setText("Carian gagal. Cuba guna alamat IP.");}});
+            }
+            @Override public void onStopDiscoveryFailed(String type,int error){}
+        };
+        try { nsd().discoverServices(LAN_TYPE,NsdManager.PROTOCOL_DNS_SD,scan); }
+        catch(IllegalArgumentException error){scan=null;empty.setText("Carian gagal. Cuba guna alamat IP.");}
+    }
+
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
         game = new WebView(this);
@@ -49,6 +147,29 @@ public final class MainActivity extends Activity {
         game.loadUrl("file:///android_asset/index.html");
         immersive();
     }
+    @SuppressWarnings("deprecation")
+    private void connectRoom(NsdServiceInfo selected) {
+                nsd().resolveService(selected,new NsdManager.ResolveListener(){
+                    @Override public void onResolveFailed(NsdServiceInfo info,int error){
+                        runOnUiThread(()->Toast.makeText(MainActivity.this,"Bilik tak dapat dicapai. Cuba Join LAN semula.",Toast.LENGTH_LONG).show());
+                    }
+                    @Override public void onServiceResolved(NsdServiceInfo info){
+                        runOnUiThread(()->{
+                            if(isFinishing() || isDestroyed())return;
+                            String address=info.getHost()==null?null:info.getHost().getHostAddress();
+                            byte[] bytes=info.getAttributes().get("room");
+                            String code=bytes==null?"":new String(bytes,StandardCharsets.US_ASCII);
+                            if(!privateAddress(address)||info.getPort()!=LanServer.PORT||!code.matches("[0-9]{6}")){
+                                Toast.makeText(MainActivity.this,"Bilik ini tak tersedia. Cuba Join LAN semula.",Toast.LENGTH_LONG).show();
+                                return;
+                            }
+                            lanAddress=address;
+                            game.loadUrl("http://"+address+":"+LanServer.PORT+"/#join="+code);
+                        });
+                    }
+                });
+    }
+
     private static boolean privateAddress(String address) {
         if (address == null || !address.matches("[0-9]{1,3}(\\.[0-9]{1,3}){3}")) return false;
         String[] parts=address.split("\\.");
@@ -78,7 +199,7 @@ public final class MainActivity extends Activity {
                     byte[] buffer=new byte[8192];
                     for(int len;(len=asset.read(buffer))!=-1;) bytes.write(buffer,0,len);
                     stopLan();
-                    lan=new LanServer(bytes.toString("UTF-8"));
+                    lan=new LanServer(bytes.toString("UTF-8"), code->runOnUiThread(()->advertiseRoom(code)));
                     lan.start(5000,false);
                     openLan("127.0.0.1");
                 } catch(IOException e) {
@@ -87,7 +208,7 @@ public final class MainActivity extends Activity {
                 }
             }).show();
     }
-    private void joinLan() {
+    private void joinLanManual() {
         EditText address=new EditText(this);
         address.setSingleLine(true);
         address.setInputType(InputType.TYPE_CLASS_PHONE);
@@ -108,6 +229,8 @@ public final class MainActivity extends Activity {
         game.loadUrl("http://"+address+":"+LanServer.PORT+"/");
     }
     private void stopLan() {
+        hideRoom();
+        stopScan();
         if(lan!=null){lan.stop();lan=null;}
         lanAddress=null;
     }
